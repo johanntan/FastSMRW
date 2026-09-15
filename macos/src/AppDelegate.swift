@@ -37,7 +37,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mainWindowController = controller
 
         state.start()
+
+		let workspaceNotifications = NSWorkspace.shared.notificationCenter
+		workspaceNotifications.addObserver(self, selector: #selector(systemWillSleep(_:)),
+			name: NSWorkspace.willSleepNotification, object: nil)
+		workspaceNotifications.addObserver(self, selector: #selector(systemDidWake(_:)),
+			name: NSWorkspace.didWakeNotification, object: nil)
     }
+
+	@objc private func systemWillSleep(_ notification: Notification) {
+		state?.suspendAudio()
+	}
+
+	@objc private func systemDidWake(_ notification: Notification) {
+		state?.resetAudio()
+	}
+
+	func applicationWillTerminate(_ notification: Notification) {
+		NSWorkspace.shared.notificationCenter.removeObserver(self)
+	}
 
     func applicationDidBecomeActive(_ notification: Notification) {
         // The initial activation is already covered by start(). On subsequent

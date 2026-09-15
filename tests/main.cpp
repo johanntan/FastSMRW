@@ -135,6 +135,10 @@ void test_marker_restore_reports_already_there();
 void test_note_selection_same_row_is_not_a_move();
 void test_restored_position_survives_default_edge_echo();
 
+// From test_sound.cpp
+void test_sound_wake_recovery();
+void test_sound_background_burst();
+
 // From test_push.cpp
 void test_push_settings();
 void test_push_requests();
@@ -159,6 +163,8 @@ static void test_http_header_lookup() {
 }
 
 int main() {
+	test_sound_wake_recovery();
+	test_sound_background_burst();
     test_version();
     test_http_header_lookup();
     test_status_roundtrip();

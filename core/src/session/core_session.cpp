@@ -371,7 +371,27 @@ void CoreSession::dispatch(const std::string& command_json) {
     } catch (...) {
         return;
     }
-    loop_.post([this, cmd = std::move(cmd)] { handle(cmd); });
+	if (!cmd.is_object() || !cmd.contains("cmd") || !cmd["cmd"].is_string()) {
+		return;
+	}
+	const std::string name = cmd["cmd"].get<std::string>();
+	const bool power_transition = name == "suspend_audio" || name == "reset_audio";
+	if (power_transition) {
+		sound_.begin_power_transition();
+	}
+	loop_.post([this, cmd = std::move(cmd), power_transition] {
+		// Release the immediate sound gate even if the handler throws. Multiple
+		// pending power commands keep it closed until the last one finishes.
+		struct TransitionGuard {
+			sound::SoundManager* manager;
+			~TransitionGuard() {
+				if (manager) {
+					manager->end_power_transition();
+				}
+			}
+		} guard{power_transition ? &sound_ : nullptr};
+		handle(cmd);
+	});
 }
 
 void CoreSession::handle(const json& cmd) {
@@ -512,6 +532,9 @@ void CoreSession::handle(const json& cmd) {
         cmd_play_earcon(cmd);
     else if (c == "reset_audio")
         cmd_reset_audio();
+	else if (c == "suspend_audio") {
+		sound_.suspend();
+	}
     else if (c == "get_action_catalog")
         cmd_get_action_catalog();
     else if (c == "get_keymap")
@@ -3367,10 +3390,10 @@ void CoreSession::cmd_play_earcon(const json& cmd) {
 
 void CoreSession::cmd_reset_audio() {
     // The front end saw the OS resume from sleep/hibernation; rebuild the audio
-    // device so earcons keep sounding. Runs on the core loop, like every other
-    // sound_ call, so there's no cross-thread access to the engine.
+	// device and discard catch-up chimes briefly. Engine access stays on the
+	// core loop; dispatch only closes the atomic sound gate.
     log::write("reset_audio: reinitializing the sound engine after resume");
-    sound_.reinitialize();
+	sound_.resume();
     sound_devices_.clear(); // devices often change across a resume: enumerate afresh
 }
 
@@ -4221,11 +4244,11 @@ std::unique_ptr<TimelineController> CoreSession::make_controller(SocialAccount* 
         // A direct message / direct mention gets the "messages" chime instead of
         // the usual mentions/notification sound (matches FastSM).
         if (has_direct && p->source().is_notification_timeline()) {
-            sound_.play_named("messages", pack);
+			sound_.play_background("messages", pack);
             return;
         }
         if (auto name = p->source().new_items_sound_name())
-            sound_.play_named(*name, pack);
+			sound_.play_background(*name, pack);
     };
     tc->on_new_items = [this, p](const std::vector<TimelineItem>& items) {
         if (!p->auto_read() || items.empty())

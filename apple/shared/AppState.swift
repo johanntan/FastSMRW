@@ -320,6 +320,10 @@ final class AppState {
     /// waiting on its idle timer, since we may be suspended before it fires.
     func pause() { client.send("pause") }
 
+	/// System sleep/wake, separate from ordinary app activation.
+	func suspendAudio() { client.send("suspend_audio") }
+	func resetAudio() { client.send("reset_audio") }
+
     // Settings: mutate the full object and echo it back so the core keeps every
     // field (it re-applies defaults for anything missing).
     func updateSettings(_ mutate: (inout [String: Any]) -> Void) {
