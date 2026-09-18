@@ -37,6 +37,13 @@ private:
 
     net::IHttpClient* http_;
     std::vector<Entry> entries_;
+    // Accounts removed from the active roster (logout, or a reload) are moved here
+    // rather than freed, because a background worker task (a refresh, a post) may
+    // still hold the raw SocialAccount* through its TimelineController. They live
+    // until the store is destroyed — which, by CoreSession's member order, happens
+    // only after the worker queues have drained. Keeps the roster's account
+    // pointers valid for the whole session (mirrors CoreSession's retired_).
+    std::vector<std::unique_ptr<SocialAccount>> retained_;
     std::string selected_key_;
 };
 

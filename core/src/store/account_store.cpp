@@ -9,6 +9,10 @@ namespace fastsm {
 AccountStore::AccountStore(net::IHttpClient* http) : http_(http) {}
 
 void AccountStore::load(const store::AppConfig& config) {
+    // Retain (don't free) any existing accounts — an in-flight worker task may
+    // still be using one. They're released at teardown, after the queues drain.
+    for (auto& e : entries_)
+        retained_.push_back(std::move(e.account));
     entries_.clear();
     for (const auto& rec : config.accounts) {
         if (rec.platform == Platform::Mastodon && rec.credential.mastodon) {
@@ -44,6 +48,9 @@ void AccountStore::add(std::unique_ptr<SocialAccount> account, store::StoredCred
 void AccountStore::remove(const std::string& account_key) {
     for (auto it = entries_.begin(); it != entries_.end(); ++it) {
         if (it->account->account_key() == account_key) {
+            // Retain (don't free): an in-flight worker task may still hold this
+            // account through its TimelineController. Released at teardown.
+            retained_.push_back(std::move(it->account));
             entries_.erase(it);
             break;
         }

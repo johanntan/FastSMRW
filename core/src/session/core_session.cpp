@@ -725,9 +725,12 @@ void CoreSession::cmd_remove_account(const json& cmd) {
     accounts_.remove(removed); // may auto-select the first remaining account
     settings_.account_soundpacks.erase(removed); // drop its per-account soundpack
     save_config();
-    parked_.erase(removed);
+    if (auto it = parked_.find(removed); it != parked_.end()) {
+        retire_timelines(it->second); // may have in-flight async; don't free
+        parked_.erase(it);
+    }
     if (was_selected) {
-        timelines_.clear(); // drop the removed account's (displayed) timelines
+        retire_timelines(timelines_); // drop the removed account's (displayed) timelines
         current_ = 0;
         apply_active_soundpack(); // follow the newly-selected account's pack
         const std::string now = accounts_.selected_key();
@@ -4096,12 +4099,32 @@ CoreSession::build_timelines_for(SocialAccount* account, const std::vector<Timel
     return v;
 }
 
+void CoreSession::retire_timelines(std::vector<std::unique_ptr<TimelineController>>& v) {
+    // Don't free a controller that may still have a worker/action task in flight
+    // capturing `this` — move it to retired_ (freed at shutdown, after the queues
+    // drain). Null its callbacks so a late-completing refresh can't touch the UI.
+    for (auto& tc : v) {
+        if (!tc)
+            continue;
+        tc->on_change = nullptr;
+        tc->on_error = nullptr;
+        tc->on_received_new = nullptr;
+        tc->on_new_items = nullptr;
+        tc->on_refreshed = nullptr;
+        tc->on_user_moved = nullptr;
+        retired_.push_back(std::move(tc));
+    }
+    v.clear();
+}
+
 void CoreSession::rebuild_timelines() {
     // Build (and keep warm) timelines for EVERY account: the selected one is
     // displayed, the rest are parked and refreshed in the background. Each account
     // reopens the exact set of timelines it had (spawned ones included); a first
     // run with nothing saved falls back to that account's defaults.
-    timelines_.clear();
+    retire_timelines(timelines_); // keep any in-flight async alive; don't free
+    for (auto& [key, list] : parked_)
+        retire_timelines(list);
     parked_.clear();
     current_ = 0;
     const auto saved = load_open_timelines();

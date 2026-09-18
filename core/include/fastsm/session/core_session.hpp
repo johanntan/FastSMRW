@@ -278,6 +278,10 @@ private:
     std::string timeline_position_text(const TimelineController* tc) const;
 
     void rebuild_timelines(); // (re)build timelines for every account
+    // Move controllers out of active use into retired_ instead of freeing them:
+    // a background worker task may still hold one. Nulls their callbacks first so
+    // a late-completing async op can't call back into the UI. Empties `v`.
+    void retire_timelines(std::vector<std::unique_ptr<TimelineController>>& v);
     // Build + warm (cache load + refresh) an account's timelines from these sources.
     std::vector<std::unique_ptr<TimelineController>>
     build_timelines_for(SocialAccount* account, const std::vector<TimelineSource>& sources);
