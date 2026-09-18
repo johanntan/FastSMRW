@@ -85,9 +85,13 @@ final class MainViewController: UIViewController {
             UIBarButtonItem(barButtonSystemItem: .refresh, target: self,
                             action: #selector(refreshTapped)),
         ]
-        navigationItem.leftBarButtonItem = UIBarButtonItem(
-            image: UIImage(systemName: "ellipsis.circle"), menu: moreMenu())
-        navigationItem.leftBarButtonItem?.accessibilityLabel = "More"
+        let moreButton = UIBarButtonItem(image: UIImage(systemName: "ellipsis.circle"),
+                                         menu: moreMenu())
+        moreButton.accessibilityLabel = "More"
+        let accountsButton = UIBarButtonItem(image: UIImage(systemName: "person.crop.circle"),
+                                             menu: accountsMenu())
+        accountsButton.accessibilityLabel = "Accounts"
+        navigationItem.leftBarButtonItems = [moreButton, accountsButton]
 
         tabScroll.showsHorizontalScrollIndicator = false
         tabScroll.translatesAutoresizingMaskIntoConstraints = false
@@ -386,7 +390,8 @@ final class MainViewController: UIViewController {
             let tab = self.tabStack.arrangedSubviews[self.state.currentIndex]
             self.tabScroll.scrollRectToVisible(tab.frame.insetBy(dx: -12, dy: 0), animated: false)
         }
-        navigationItem.leftBarButtonItem?.menu = moreMenu()
+        navigationItem.leftBarButtonItems?.first?.menu = moreMenu()
+        navigationItem.leftBarButtonItems?.dropFirst().first?.menu = accountsMenu()
     }
 
     @objc private func tabTapped(_ sender: UIButton) {
@@ -679,6 +684,12 @@ final class MainViewController: UIViewController {
         }
         addKey(UIKeyCommand.inputDownArrow, .shift, "Move Timeline Down") { [weak self] in
             self?.state.reorderTimeline(dir: "down")
+        }
+        addKey(UIKeyCommand.inputUpArrow, .command, "Top of Timeline", priority: true) { [weak self] in
+            self?.state.performAction("top_item")
+        }
+        addKey(UIKeyCommand.inputDownArrow, .command, "Bottom of Timeline", priority: true) { [weak self] in
+            self?.state.performAction("bottom_item")
         }
 
         addKey("\r", [], "Interact", priority: true) { [weak self] in
@@ -1011,6 +1022,51 @@ final class MainViewController: UIViewController {
         }])
     }
 
+    /// The Accounts button's menu: a checkable list of your accounts (tap one to
+    /// switch straight to it), plus add / settings / remove. Rebuilt at open time.
+    private func accountsMenu() -> UIMenu {
+        UIMenu(title: "Accounts", children: [UIDeferredMenuElement.uncached { [weak self] completion in
+            guard let self else { completion([]); return }
+            var pick: [UIMenuElement] = []
+            for account in self.state.accounts {
+                let name = account.displayName.isEmpty
+                    ? "@\(account.handle)" : "\(account.displayName) (@\(account.handle))"
+                pick.append(UIAction(title: name,
+                                     state: account.key == self.state.selectedAccountKey ? .on : .off) {
+                    [weak self] _ in self?.state.selectAccount(key: account.key)
+                })
+            }
+            var items: [UIMenuElement] = []
+            if !pick.isEmpty {
+                items.append(UIMenu(title: "Switch Account", options: .displayInline, children: pick))
+            }
+            var manage: [UIMenuElement] = [
+                UIAction(title: "Add Account…",
+                         image: UIImage(systemName: "person.badge.plus")) { [weak self] _ in
+                    self?.onAddAccount?()
+                },
+                UIAction(title: "Account Settings…",
+                         image: UIImage(systemName: "person.crop.circle.badge.checkmark")) {
+                    [weak self] _ in self?.state.getAccountSettings()
+                },
+            ]
+            if let handle = self.state.currentAccountHandle,
+               let key = self.state.accounts.first(where: {
+                   $0.key == self.state.selectedAccountKey })?.key {
+                manage.append(UIAction(title: "Remove \(handle)…", attributes: .destructive) {
+                    [weak self] _ in
+                    guard let self else { return }
+                    confirm("Remove Account", message: "Remove \(handle) from FastSM?",
+                            actionTitle: "Remove", on: self) { [weak self] in
+                        self?.state.removeAccount(key: key)
+                    }
+                })
+            }
+            items.append(UIMenu(options: .displayInline, children: manage))
+            completion(items)
+        }])
+    }
+
     // MARK: Compose
 
     private func presentCompose(_ context: ComposeContext) {
@@ -1324,6 +1380,13 @@ final class MainViewController: UIViewController {
     /// boundary earcon signals a permanent timeline. Undo Navigation (in the
     /// More menu) separately re-opens where you navigated from.
     override func accessibilityPerformEscape() -> Bool {
+        // Dismiss whatever's presented on top first (the audio/video player, the
+        // image viewer, an alert or action sheet) — like tapping its Done button —
+        // and only close the timeline when nothing is in the way.
+        if let presented = presentedViewController {
+            presented.dismiss(animated: true)
+            return true
+        }
         let index = state.currentIndex
         if state.timelines.indices.contains(index), state.timelines[index].dismissable {
             state.closeTimeline()

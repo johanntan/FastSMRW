@@ -257,11 +257,18 @@ Notification map_notification_group(const json& group,
     n.type = notif_kind(str(group, "type"));
     n.notifications_count = num(group, "notifications_count", 1);
     n.created_at = date(group, "latest_page_notification_at");
-    // sample_account_ids are newest-first; the first is the actor we name ("A").
+    // sample_account_ids are newest-first; the first is the actor we name ("A"),
+    // and we keep all the sampled accounts so the UI can reveal the "N others".
     if (auto it = group.find("sample_account_ids"); it != group.end() && it->is_array() &&
                                                     !it->empty()) {
-        if (auto a = accounts.find(it->front().get<std::string>()); a != accounts.end())
-            n.account = map_user(*a->second);
+        for (const auto& idv : *it) {
+            if (!idv.is_string())
+                continue;
+            if (auto a = accounts.find(idv.get<std::string>()); a != accounts.end())
+                n.group_accounts.push_back(map_user(*a->second));
+        }
+        if (!n.group_accounts.empty())
+            n.account = n.group_accounts.front();
     }
     if (auto it = group.find("status_id"); it != group.end() && it->is_string()) {
         if (auto s = statuses.find(it->get<std::string>()); s != statuses.end())

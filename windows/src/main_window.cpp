@@ -1228,6 +1228,10 @@ void MainWindow::ev_post_info(const json& e) {
     const bool is_mine = e.value("is_mine", false);
     const bool mute_ok = e.contains("features") && e["features"].value("mute_conversations", false);
     const bool muted = e.value("muted", false);
+    const bool favorited = e.value("favorited", false);
+    const bool boosted = e.value("boosted", false);
+    const bool bookmarked = e.value("bookmarked", false);
+    const bool bookmark_ok = e.contains("features") && e["features"].value("bookmarks", false);
     const int fav_count = e.value("favorites_count", 0);
     const int boost_count = e.value("boosts_count", 0);
     PollInfo poll;
@@ -1240,7 +1244,8 @@ void MainWindow::ev_post_info(const json& e) {
     const std::string keep_id = selected_id();
     auto guard = enter_modal();
     PostInfoResult res = show_post_info_dialog(hwnd_, inst_, text, quote_ok, browser_ok, is_mine,
-                                               mute_ok, muted, fav_count, boost_count, poll);
+                                               mute_ok, muted, favorited, boosted, bookmarked,
+                                               bookmark_ok, fav_count, boost_count, poll);
     restore_selection(keep_id);
     leave_modal(guard);
     if (!res.action)
@@ -1257,10 +1262,26 @@ void MainWindow::ev_post_info(const json& e) {
         dispatch_cmd({{"cmd", "compose_context"}, {"mode", "reply"}, {"id", id}});
         break;
     case PostInfoAction::Boost:
+        // Honor the same confirmations the timeline's Boost key uses.
+        if (boosted && settings_.value("confirm_unboost", false) &&
+            !confirm(hwnd_, L"Unboost this post?", L"Unboost"))
+            break;
+        if (!boosted && settings_.value("confirm_boost", false) &&
+            !confirm(hwnd_, L"Boost this post?", L"Boost"))
+            break;
         dispatch_cmd({{"cmd", "toggle_boost"}, {"id", id}});
         break;
     case PostInfoAction::Favorite:
+        if (favorited && settings_.value("confirm_unfavorite", false) &&
+            !confirm(hwnd_, L"Unfavorite this post?", L"Unfavorite"))
+            break;
+        if (!favorited && settings_.value("confirm_favorite", false) &&
+            !confirm(hwnd_, L"Favorite this post?", L"Favorite"))
+            break;
         dispatch_cmd({{"cmd", "toggle_favorite"}, {"id", id}});
+        break;
+    case PostInfoAction::Bookmark:
+        dispatch_cmd({{"cmd", "toggle_bookmark"}, {"id", id}});
         break;
     case PostInfoAction::Quote:
         dispatch_cmd({{"cmd", "compose_context"}, {"mode", "quote"}, {"id", id}});

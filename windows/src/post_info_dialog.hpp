@@ -12,6 +12,7 @@ enum class PostInfoAction {
     Reply,
     Boost,
     Favorite,
+    Bookmark,
     Quote,
     OpenBrowser,
     OpenLinks,
@@ -45,7 +46,8 @@ struct PostInfoResult {
 // performs the action (dispatches the matching command).
 PostInfoResult show_post_info_dialog(HWND parent, HINSTANCE inst, const std::wstring& text,
                                      bool quote_ok, bool browser_ok, bool is_mine, bool mute_ok,
-                                     bool muted, int favorites_count, int boosts_count,
+                                     bool muted, bool favorited, bool boosted, bool bookmarked,
+                                     bool bookmark_ok, int favorites_count, int boosts_count,
                                      const PollInfo& poll);
 
 } // namespace fastsmui

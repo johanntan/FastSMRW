@@ -602,6 +602,8 @@ final class AppState {
 
     // Accounts
     func selectAccount(dir: String) { client.send("select_account", ["dir": dir]) }
+    // Jump straight to a specific account (the account picker).
+    func selectAccount(key: String) { client.send("select_account", ["key": key]) }
     // Per-account settings (today: the soundpack override for the current account).
     func getAccountSettings() { client.send("get_account_settings") }
     func setAccountSettings(soundpack: String) {

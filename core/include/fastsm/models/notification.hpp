@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "fastsm/models/platform.hpp"
 #include "fastsm/models/status.hpp"
@@ -37,6 +38,10 @@ struct Notification {
     // notification). The UI composes "A and N others …" from account + this count.
     std::string group_key;
     int notifications_count = 1;
+    // The sampled actors of a grouped notification (e.g. the several people in
+    // "A and N others followed you"). `account` is the first of these. Lets the
+    // UI reveal who the "N others" are — otherwise only the most recent is known.
+    std::vector<User> group_accounts;
 };
 
 } // namespace fastsm

@@ -1,6 +1,17 @@
 FastSMRW changelog
 ==================
 
+0.6.0
+-----
+
+- New: on iPhone, an Accounts button next to the More button lists your accounts so you can jump straight to one, and add, remove or configure accounts.
+- New: on iPhone, Command+Up and Command+Down jump to the top and bottom of the timeline.
+- Fixed: on iPhone, a two-finger scrub now closes the media player or an open dialog first, instead of always closing the current timeline.
+- Fixed: editing a post keeps its paragraphs and line breaks instead of running them together.
+- New: bookmark or un-bookmark a post from the invisible interface with Alt+Windows+B.
+- New: on Windows, the View Post window has a Bookmark button, its Boost/Favorite/Bookmark buttons read Unboost/Unfavorite/Unbookmark once done, and it now asks before un-boosting or un-favoriting if you've turned those confirmations on.
+- Fixed: on a "someone and 1 other followed you" notification you can now open each of the people who followed you; and View Thread no longer does nothing on a notification that has no post behind it.
+
 0.5.9
 -----
 

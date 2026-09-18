@@ -752,15 +752,31 @@ void CoreSession::cmd_select_account(const json& cmd) {
     auto accts = accounts_.accounts();
     if (accts.size() < 2)
         return;
-    int idx = 0;
-    for (size_t i = 0; i < accts.size(); ++i)
-        if (accts[i]->account_key() == accounts_.selected_key())
-            idx = static_cast<int>(i);
-    const int n = static_cast<int>(accts.size());
-    const std::string dir = cmd.value("dir", std::string{});
-    const int target = dir == "prev" ? (idx - 1 + n) % n : (idx + 1) % n;
+    std::string target_key;
+    // "key" jumps straight to a specific account (the account picker); otherwise
+    // "dir" ("prev"/"next") steps to the neighbor.
+    if (const std::string key = cmd.value("key", std::string{}); !key.empty()) {
+        if (key == accounts_.selected_key())
+            return; // already selected
+        for (SocialAccount* a : accts)
+            if (a->account_key() == key) {
+                target_key = key;
+                break;
+            }
+        if (target_key.empty())
+            return; // no such account
+    } else {
+        int idx = 0;
+        for (size_t i = 0; i < accts.size(); ++i)
+            if (accts[i]->account_key() == accounts_.selected_key())
+                idx = static_cast<int>(i);
+        const int n = static_cast<int>(accts.size());
+        const std::string dir = cmd.value("dir", std::string{});
+        const int target = dir == "prev" ? (idx - 1 + n) % n : (idx + 1) % n;
+        target_key = accts[static_cast<size_t>(target)]->account_key();
+    }
     commit_home_marker_for(current()); // leaving this account's timeline
-    switch_account(accts[static_cast<size_t>(target)]->account_key()); // swap, don't rebuild
+    switch_account(target_key); // swap, don't rebuild
     sound_.play(sound::Earcon::Navigate);
     emit_accounts();
     emit_timelines();
@@ -1785,16 +1801,21 @@ void CoreSession::cmd_open_thread(const json& cmd) {
     if (!accounts_.selected() || !tc || row_id.empty())
         return;
     // Use the underlying post (for a boost, the original) as the thread root.
-    std::string status_id = row_id;
+    const TimelineItem* item = find_item(tc, row_id);
+    const Status* s = item ? item->actionable_status() : nullptr;
+    if (!s) {
+        // A row with no post behind it — a follow notification, a user row —
+        // has no conversation. Don't spawn a thread on the row id (a group key).
+        sound_.play(sound::Earcon::Error);
+        emit_announce("There's no conversation to open here.");
+        return;
+    }
+    const std::string status_id = s->id;
     std::string title = "Thread";
-    if (const TimelineItem* item = find_item(tc, row_id))
-        if (const Status* s = item->actionable_status()) {
-            status_id = s->id;
-            const std::string& name =
-                s->account.display_name.empty() ? s->account.acct : s->account.display_name;
-            if (!name.empty())
-                title = "Thread: " + name;
-        }
+    const std::string& name =
+        s->account.display_name.empty() ? s->account.acct : s->account.display_name;
+    if (!name.empty())
+        title = "Thread: " + name;
     spawn_source(TimelineSource::thread(status_id, title));
 }
 
@@ -1822,8 +1843,17 @@ std::vector<User> CoreSession::users_in_post(const TimelineItem& item) const {
     // follow-request notifications carry no post, so this is the only user on the
     // row — without it, "Open user timeline/profile" and "Speak user" do nothing.
     // Seeded first so it's the primary choice; the status pass below dedups by id.
-    if (const Notification* n = item.notification(); n && !n->account.id.empty())
-        users.push_back(n->account);
+    if (const Notification* n = item.notification()) {
+        // A grouped notification ("A and N others followed you") samples several
+        // actors — offer all of them so the "N others" are reachable, not just A.
+        if (!n->group_accounts.empty()) {
+            for (const User& u : n->group_accounts)
+                if (!u.id.empty())
+                    users.push_back(u);
+        } else if (!n->account.id.empty()) {
+            users.push_back(n->account);
+        }
+    }
     const Status* outer = item.status();
     if (!outer)
         return users;
@@ -3104,10 +3134,27 @@ void CoreSession::cmd_compose_context(const json& cmd) {
             return;
         }
         ctx["title"] = "Edit Post";
+        // Fall back to the display text, but prefer the ORIGINAL source below:
+        // target->text had its line breaks flattened to spaces at parse time, so
+        // editing from it would silently destroy the post's paragraphs on save.
         ctx["prefill_text"] = target->text;
         if (target->spoiler_text)
             ctx["prefill_cw"] = *target->spoiler_text;
         ctx["edit_id"] = target->id;
+        // Fetch the post's raw source (the author's real newlines, full URLs)
+        // off the worker thread, then emit the composer with it.
+        const std::string edit_id = target->id;
+        worker_.post([this, ctx, edit_id, account]() mutable {
+            const std::optional<PostSource> src = account->post_source(edit_id);
+            loop_.post([this, ctx, src]() mutable {
+                if (src && !src->text.empty())
+                    ctx["prefill_text"] = src->text;
+                if (src && !src->spoiler_text.empty())
+                    ctx["prefill_cw"] = src->spoiler_text;
+                emit(ctx);
+            });
+        });
+        return; // emitted asynchronously once the source arrives
     } else if (mode == "message") {
         // A direct message is an ordinary post addressed to the user with direct
         // visibility. The handle goes in the body — that's how the server routes
@@ -3180,6 +3227,9 @@ void CoreSession::cmd_post_info(const json& cmd) {
                {"has_url", !s->url.empty()},
                {"is_mine", s->account.id == tc->account()->me().id},
                {"muted", s->muted},
+               {"favorited", s->favourited},
+               {"boosted", s->boosted},
+               {"bookmarked", s->bookmarked},
                {"favorites_count", s->favourites_count},
                {"boosts_count", s->boosts_count}};
     // A poll the viewer can still vote in (not yet voted, not closed): let the UI

@@ -21,6 +21,10 @@ struct Ctx {
     bool is_mine;  // your own post -> the Delete button is shown
     bool mute_ok;  // platform supports conversation muting -> the Mute button is shown
     bool muted;    // conversation currently muted -> the button reads "Unmute"
+    bool favorited;   // already favorited -> the button reads "Unfavorite"
+    bool boosted;     // already boosted -> the button reads "Unboost"
+    bool bookmarked;  // already bookmarked -> the button reads "Unbookmark"
+    bool bookmark_ok; // platform supports bookmarks -> the Bookmark button is shown
     int favorites_count; // >0 -> the "View Favorited" button is shown (with the count)
     int boosts_count;    // >0 -> the "View Reposters" button is shown (with the count)
     const PollInfo* poll;
@@ -130,6 +134,16 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
             ShowWindow(GetDlgItem(dlg, IDC_POSTINFO_MUTE), SW_HIDE);
         else if (c->muted)
             SetDlgItemTextW(dlg, IDC_POSTINFO_MUTE, L"Unm&ute Conversation");
+        // Boost / Favorite / Bookmark labels reflect the current state, so the
+        // action (and its confirmation) reads right — "Unboost" once boosted, etc.
+        if (c->boosted)
+            SetDlgItemTextW(dlg, IDC_POSTINFO_BOOST, L"Un&boost");
+        if (c->favorited)
+            SetDlgItemTextW(dlg, IDC_POSTINFO_FAVORITE, L"Un&favorite");
+        if (!c->bookmark_ok)
+            ShowWindow(GetDlgItem(dlg, IDC_POSTINFO_BOOKMARK), SW_HIDE);
+        else if (c->bookmarked)
+            SetDlgItemTextW(dlg, IDC_POSTINFO_BOOKMARK, L"Unbook&mark");
         // View Favorited / Reposters: shown with the count only when someone has.
         if (c->favorites_count > 0)
             SetDlgItemTextW(dlg, IDC_POSTINFO_FAVBY,
@@ -175,6 +189,9 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         case IDC_POSTINFO_FAVORITE:
             finish(PostInfoAction::Favorite);
             return TRUE;
+        case IDC_POSTINFO_BOOKMARK:
+            finish(PostInfoAction::Bookmark);
+            return TRUE;
         case IDC_POSTINFO_QUOTE:
             finish(PostInfoAction::Quote);
             return TRUE;
@@ -219,9 +236,11 @@ INT_PTR CALLBACK Proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
 
 PostInfoResult show_post_info_dialog(HWND parent, HINSTANCE inst, const std::wstring& text,
                                      bool quote_ok, bool browser_ok, bool is_mine, bool mute_ok,
-                                     bool muted, int favorites_count, int boosts_count,
+                                     bool muted, bool favorited, bool boosted, bool bookmarked,
+                                     bool bookmark_ok, int favorites_count, int boosts_count,
                                      const PollInfo& poll) {
-    Ctx ctx{&text,  quote_ok, browser_ok,      is_mine,        mute_ok, muted,
+    Ctx ctx{&text,       quote_ok,   browser_ok,      is_mine,      mute_ok,
+            muted,       favorited,  boosted,         bookmarked,   bookmark_ok,
             favorites_count, boosts_count, &poll, nullptr, {}};
     DialogBoxParamW(inst, MAKEINTRESOURCEW(IDD_POST_INFO), parent, Proc,
                     reinterpret_cast<LPARAM>(&ctx));

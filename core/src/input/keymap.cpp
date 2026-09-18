@@ -316,7 +316,7 @@ const std::vector<ActionDef>& action_catalog() {
         {"BoostToggle", "Boost / Unboost", "control+shift+win+r"},
         {"LikeToggle", "Like / Unlike", "alt+win+i"},
         {"View", "Post info", "alt+win+v"},
-        {"BookmarkToggle", "Bookmark / Unbookmark", ""}, // in-app / layer M; unbound as a global hotkey
+        {"BookmarkToggle", "Bookmark / Unbookmark", "alt+win+b"}, // also in-app / layer M
         {"Enter", "Default action (like Enter)", "alt+win+return"},
         {"SecondaryAction", "Secondary action (like Shift+Enter)", "alt+shift+win+return"},
         {"Url", "Open link in post", "control+alt+win+o"},
