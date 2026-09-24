@@ -12,7 +12,7 @@ namespace fastsm::sound {
 // SILENT — like the Mac app, row movement is conveyed by the screen reader, not
 // an earcon.
 // Mirrors the Mac Earcon enum exactly. Per-timeline "new items" chimes are NOT
-// here — they use SoundManager::play_named(source.new_items_sound_name()).
+// here — they use SoundManager::play_background(source.new_items_sound_name()).
 enum class Earcon {
     Navigate, // silent — row movement is conveyed by the screen reader
     Boundary, // hit the top/bottom of a list
@@ -76,6 +76,13 @@ public:
     // live voices are recreated. Safe to call even if the engine never came up.
     void reinitialize();
 
+	// Power commands block new sounds as soon as they are dispatched; engine
+	// teardown/recovery stays on the core loop. Pair begin/end even on failure.
+	void begin_power_transition();
+	void end_power_transition();
+	void suspend();
+	void resume();
+
     // ["Default", <user packs sorted>].
     std::vector<std::string> list_soundpacks() const;
 
@@ -84,10 +91,14 @@ public:
     // account's chime can sound in that account's pack.
     void play(Earcon e, const std::string& pack = {});
     void play_named(const std::string& base, const std::string& pack = {});
+	// Background timeline/notification chimes never overlap each other and are
+	// discarded during wake catch-up. Foreground action feedback stays separate.
+	void play_background(const std::string& base, const std::string& pack = {});
 
 private:
     struct Impl;
     Impl* impl_;
+	void play_impl(const std::string& base, const std::string& pack, bool background);
 
     // Ordered pack directories to search for a sound (the named pack, then default).
     std::vector<std::filesystem::path> search_dirs(const std::string& pack) const;

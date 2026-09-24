@@ -5,6 +5,7 @@
 #include <TargetConditionals.h>
 #endif
 
+#include "fastsm/sound/playback_policy.hpp"
 #include "fastsm/sound/sound_manager.hpp"
 
 #include <algorithm>
@@ -64,6 +65,7 @@ struct Voice {
     ma_sound sound{};
     ma_audio_buffer_ref ref{};
     bool has_ref = false;
+	bool background = false;
 };
 
 } // namespace
@@ -73,6 +75,7 @@ struct SoundManager::Impl {
     bool ok = false;
     std::unordered_map<std::string, DecodedPcm> pcm_cache; // keyed by file path
     std::vector<std::unique_ptr<Voice>> voices;
+	PlaybackPolicy policy;
 
     void cleanup_finished() {
         voices.erase(std::remove_if(voices.begin(), voices.end(),
@@ -213,6 +216,28 @@ void SoundManager::reinitialize() {
         impl_->ok = true;
 }
 
+void SoundManager::begin_power_transition() {
+	impl_->policy.begin_power_transition();
+}
+
+void SoundManager::end_power_transition() {
+	impl_->policy.end_power_transition();
+}
+
+void SoundManager::suspend() {
+	impl_->policy.suspend();
+	impl_->stop_all();
+	if (impl_->ok) {
+		ma_engine_uninit(&impl_->engine);
+		impl_->ok = false;
+	}
+}
+
+void SoundManager::resume() {
+	reinitialize();
+	impl_->policy.resume(PlaybackPolicy::Clock::now());
+}
+
 void SoundManager::set_output_device(const std::string& name) {
     if (name == output_device_)
         return;
@@ -311,8 +336,21 @@ void SoundManager::play(Earcon e, const std::string& pack) {
 }
 
 void SoundManager::play_named(const std::string& base, const std::string& pack) {
+	play_impl(base, pack, false);
+}
+
+void SoundManager::play_background(const std::string& base, const std::string& pack) {
+	play_impl(base, pack, true);
+}
+
+void SoundManager::play_impl(const std::string& base, const std::string& pack, bool background) {
     if (!enabled_)
         return;
+	// Check before device recovery: sleep must not revive the engine or build
+	// a backlog of voices while its output callback is stopped.
+	if (!impl_->policy.allows(background, false, PlaybackPolicy::Clock::now())) {
+		return;
+	}
     // Self-heal a dead output device (audio service restarted, device unplugged or
     // re-routed) rather than going silent until the app is restarted.
     if (!impl_->device_running()) {
@@ -328,7 +366,13 @@ void SoundManager::play_named(const std::string& base, const std::string& pack) 
         return;
 
     impl_->cleanup_finished();
+	const bool background_playing = std::any_of(impl_->voices.begin(), impl_->voices.end(),
+		[](const auto& voice) { return voice->background; });
+	if (!impl_->policy.allows(background, background_playing, PlaybackPolicy::Clock::now())) {
+		return;
+	}
     auto voice = std::make_unique<Voice>();
+	voice->background = background;
 
     const std::string path_str = path.string();
     const bool is_ogg = path.extension() == ".ogg" || path.extension() == ".OGG";
@@ -368,7 +412,18 @@ void SoundManager::play_named(const std::string& base, const std::string& pack) 
     }
 
     ma_sound_set_volume(&voice->sound, volume_);
-    ma_sound_start(&voice->sound);
+	// A power command may have arrived while decoding/opening the file.
+	if (!impl_->policy.allows(background, background_playing, PlaybackPolicy::Clock::now()) ||
+		ma_sound_start(&voice->sound) != MA_SUCCESS) {
+		ma_sound_uninit(&voice->sound);
+		if (voice->has_ref) {
+			ma_audio_buffer_ref_uninit(&voice->ref);
+		}
+		return;
+	}
+	if (background) {
+		impl_->policy.background_started(PlaybackPolicy::Clock::now());
+	}
     impl_->voices.push_back(std::move(voice));
 }
 

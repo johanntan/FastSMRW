@@ -17,6 +17,7 @@ FastSMRW changelog
 0.5.9
 -----
 
+- Fixed: waking the Mac no longer plays a burst of overlapping alert sounds, and background notification chimes no longer pile up across the apps.
 - New: the user profile dialog now shows the date the account joined.
 - Fixed: the app no longer crashes when you close it from the app switcher, and sometimes right after opening it or when removing an account — a background timeline refresh could outlive the timeline it belonged to.
 - New: FastSMRW can now ask before you follow or unfollow someone — turn either on in Settings, Confirmation.
