@@ -255,3 +255,51 @@ void test_mastodon_grouped_follow_request_fetch() {
     if (fav)
         CHECK(fav->type == Notification::Kind::Favourite);
 }
+
+namespace {
+// Answers every call with an empty page and whatever rate-limit headers are set.
+struct FakeRateLimitHttp : net::IHttpClient {
+    net::Headers headers;
+    long status = 200;
+    net::HttpResponse send(const net::HttpRequest&) override {
+        net::HttpResponse res;
+        res.status = status;
+        res.body = "[]";
+        res.headers = headers;
+        return res;
+    }
+};
+} // namespace
+
+void test_mastodon_rate_limit_pauses_refresh() {
+    FakeRateLimitHttp http;
+    MastodonCredentials cred;
+    cred.instance_url = "https://example.social";
+    cred.access_token = "tok";
+    User me;
+    me.id = "me";
+    MastodonAccount account(cred, me, &http);
+
+    // Plenty of budget left: background refresh keeps running.
+    http.headers = {{"X-RateLimit-Remaining", "250"}, {"X-RateLimit-Reset", "2999-01-01T00:00:00.000Z"}};
+    account.items(TimelineSource::home(), 40, {});
+    CHECK(account.background_refresh_allowed());
+
+    // Nearly spent: paused until the server's reset time.
+    http.headers = {{"X-RateLimit-Remaining", "20"}, {"X-RateLimit-Reset", "2999-01-01T00:00:00.000Z"}};
+    account.items(TimelineSource::home(), 40, {});
+    CHECK(!account.background_refresh_allowed());
+
+    // Once the reset time has passed, refresh resumes.
+    MastodonAccount fresh(cred, me, &http);
+    http.headers = {{"X-RateLimit-Remaining", "0"}, {"X-RateLimit-Reset", "2000-01-01T00:00:00.000Z"}};
+    fresh.items(TimelineSource::home(), 40, {});
+    CHECK(fresh.background_refresh_allowed());
+
+    // A bare 429 (no headers) pauses too.
+    MastodonAccount limited(cred, me, &http);
+    http.headers = {};
+    http.status = 429;
+    limited.items(TimelineSource::home(), 40, {});
+    CHECK(!limited.background_refresh_allowed());
+}

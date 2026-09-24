@@ -115,6 +115,32 @@ void MastodonAccount::load_configuration() {
     }
 }
 
+net::HttpResponse MastodonAccount::send(const net::HttpRequest& req) {
+    net::HttpResponse res = http_->send(req);
+    // Mastodon allows ~300 calls per 5 minutes per account. Auto-refreshing many
+    // open timelines can spend all of it, and then the user's own posts fail with
+    // 429. When the budget runs low, pause background refresh until the server's
+    // window resets. Only our own instance's headers count (not remote timelines).
+    // ponytail: fixed reserve; scale by X-RateLimit-Limit if servers vary widely.
+    constexpr int kReserve = 100;
+    if (req.url.rfind(credentials_.instance_url, 0) == 0) {
+        const auto remaining = res.header("X-RateLimit-Remaining");
+        if (res.status == 429 || (remaining && std::atoi(remaining->c_str()) < kReserve)) {
+            const auto reset = res.header("X-RateLimit-Reset");
+            const std::int64_t until = (reset ? util::parse_iso8601(*reset) : std::nullopt)
+                                           .value_or(util::now_unix() + 300);
+            if (throttled_until_.exchange(until) < util::now_unix())
+                log::write("rate limit low (remaining=" + remaining.value_or("?") +
+                           "); pausing auto-refresh until " + reset.value_or("+5m"));
+        }
+    }
+    return res;
+}
+
+bool MastodonAccount::background_refresh_allowed() const {
+    return util::now_unix() >= throttled_until_.load();
+}
+
 bool MastodonAccount::request(const std::string& method, const std::string& url,
                               const std::string& body, const std::string& content_type,
                               std::string& out_body, long& out_status) {
@@ -126,9 +152,15 @@ bool MastodonAccount::request(const std::string& method, const std::string& url,
         req.headers.push_back({"Content-Type", content_type});
         req.body = body;
     }
-    const net::HttpResponse res = http_->send(req);
+    const net::HttpResponse res = send(req);
     out_status = res.status;
     out_body = res.body;
+    // Log failures (status + server's error text) so a failed action isn't just
+    // an error earcon with nothing to go on. Query string dropped: it can be long.
+    if (!res.ok() && method != "GET")
+        log::write(method + " " + url.substr(0, url.find('?')) + " failed: status=" +
+                   std::to_string(res.status) + (res.error.empty() ? "" : " " + res.error) +
+                   " body=" + res.body.substr(0, 300));
     return res.ok();
 }
 
@@ -225,7 +257,7 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
         req.method = "GET";
         req.url = url;
         req.headers.push_back({"Authorization", "Bearer " + credentials_.access_token});
-        const net::HttpResponse res = http_->send(req);
+        const net::HttpResponse res = send(req);
         if (!res.ok())
             return page;
         try {
@@ -251,7 +283,7 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
         req.method = "GET";
         req.url = url;
         req.headers.push_back({"Authorization", "Bearer " + credentials_.access_token});
-        const net::HttpResponse res = http_->send(req);
+        const net::HttpResponse res = send(req);
         if (!res.ok())
             return page;
         try {
@@ -300,7 +332,7 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
         net::HttpRequest req;
         req.method = "GET";
         req.url = rurl; // unauthenticated: no Authorization header
-        const net::HttpResponse res = http_->send(req);
+        const net::HttpResponse res = send(req);
         if (!res.ok())
             return page;
         json j;
@@ -336,7 +368,7 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
         req.method = "GET";
         req.url = url;
         req.headers.push_back({"Authorization", "Bearer " + credentials_.access_token});
-        const net::HttpResponse res = http_->send(req);
+        const net::HttpResponse res = send(req);
         if (res.status == 404) {
             grouped_notifs_unsupported_ = true; // pre-4.3 instance: use v1 from now on
         } else if (res.ok()) {
@@ -385,7 +417,7 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
         req.method = "GET";
         req.url = url;
         req.headers.push_back({"Authorization", "Bearer " + credentials_.access_token});
-        const net::HttpResponse res = http_->send(req);
+        const net::HttpResponse res = send(req);
         if (!res.ok())
             return page;
         try {
@@ -486,7 +518,7 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
     req.method = "GET";
     req.url = url;
     req.headers.push_back({"Authorization", "Bearer " + credentials_.access_token});
-    const net::HttpResponse res = http_->send(req);
+    const net::HttpResponse res = send(req);
     if (!res.ok())
         return page;
 
@@ -545,7 +577,7 @@ TimelinePage MastodonAccount::items(const TimelineSource& source, int limit,
         preq.method = "GET";
         preq.url = credentials_.instance_url + path + "?pinned=true&limit=" + std::to_string(limit);
         preq.headers.push_back({"Authorization", "Bearer " + credentials_.access_token});
-        const net::HttpResponse pres = http_->send(preq);
+        const net::HttpResponse pres = send(preq);
         if (pres.ok()) {
             try {
                 const json pj = json::parse(pres.body);
@@ -784,7 +816,7 @@ std::string MastodonAccount::remote_account_id(const std::string& base,
     net::HttpRequest req;
     req.method = "GET";
     req.url = base + "/api/v1/accounts/lookup?acct=" + util::percent_encode(username);
-    net::HttpResponse res = http_->send(req);
+    net::HttpResponse res = send(req);
     if (res.ok()) {
         try {
             if (std::string id = json::parse(res.body).value("id", std::string()); !id.empty())
@@ -794,7 +826,7 @@ std::string MastodonAccount::remote_account_id(const std::string& base,
     }
     // Older servers lack /lookup; fall back to account search.
     req.url = base + "/api/v1/accounts/search?q=" + util::percent_encode(username) + "&limit=1";
-    res = http_->send(req);
+    res = send(req);
     if (res.ok()) {
         try {
             const json arr = json::parse(res.body);
@@ -1084,7 +1116,7 @@ FullRelationResult MastodonAccount::fetch_all_relations(const std::string& id, b
         req.method = "GET";
         req.url = url;
         req.headers.push_back({"Authorization", "Bearer " + credentials_.access_token});
-        const net::HttpResponse res = http_->send(req);
+        const net::HttpResponse res = send(req);
         if (res.status == 429) {
             out.status = FullRelationResult::Status::RateLimited;
             return out;

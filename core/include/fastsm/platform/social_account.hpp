@@ -226,6 +226,10 @@ public:
     // The controller uses this so each fetch pulls as much as the server allows.
     virtual int max_page_size() const { return 40; }
 
+    // False while the account's API rate limit is nearly spent, so background
+    // auto-refresh backs off and leaves room for the user's own actions.
+    virtual bool background_refresh_allowed() const { return true; }
+
     // Fetch one page. Implementations run synchronously on the worker thread.
     virtual TimelinePage items(const TimelineSource& source, int limit,
                                const PageCursor& cursor) = 0;

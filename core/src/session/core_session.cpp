@@ -4271,11 +4271,16 @@ void CoreSession::switch_account(const std::string& new_key) {
 }
 
 void CoreSession::refresh_all_accounts() {
+    // Skip accounts near their rate limit so posting and other actions still work.
+    auto refresh = [](TimelineController& tc) {
+        if (!tc.account() || tc.account()->background_refresh_allowed())
+            tc.refresh();
+    };
     for (auto& tc : timelines_)
-        tc->refresh();
+        refresh(*tc);
     for (auto& [key, v] : parked_)
         for (auto& tc : v)
-            tc->refresh();
+            refresh(*tc);
 }
 
 std::unique_ptr<TimelineController> CoreSession::make_controller(SocialAccount* account,

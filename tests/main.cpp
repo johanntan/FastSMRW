@@ -97,6 +97,7 @@ void test_capi_session_events();
 
 // From test_thread.cpp
 void test_mastodon_thread_fetch();
+void test_mastodon_rate_limit_pauses_refresh();
 void test_mastodon_thread_folding();
 void test_mastodon_instance_max_chars();
 void test_mastodon_user_pinned_posts();
@@ -228,6 +229,7 @@ int main() {
     test_sse_multiline_crlf_comments();
     test_capi_session_events();
     test_mastodon_thread_fetch();
+    test_mastodon_rate_limit_pauses_refresh();
     test_mastodon_thread_folding();
     test_mastodon_instance_max_chars();
     test_mastodon_user_pinned_posts();

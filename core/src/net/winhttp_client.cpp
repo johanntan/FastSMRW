@@ -166,11 +166,11 @@ HttpResponse WinHttpClient::send(const HttpRequest& req) {
         req.body.empty() ? WINHTTP_NO_REQUEST_DATA : const_cast<char*>(req.body.data());
     if (!WinHttpSendRequest(request, WINHTTP_NO_ADDITIONAL_HEADERS, 0, body_ptr, body_len, body_len,
                             0)) {
-        res.error = "WinHttpSendRequest failed";
+        res.error = "WinHttpSendRequest failed (" + std::to_string(GetLastError()) + ")";
         return res;
     }
     if (!WinHttpReceiveResponse(request, nullptr)) {
-        res.error = "WinHttpReceiveResponse failed";
+        res.error = "WinHttpReceiveResponse failed (" + std::to_string(GetLastError()) + ")";
         return res;
     }
 

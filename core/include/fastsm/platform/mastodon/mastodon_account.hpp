@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
@@ -99,7 +101,11 @@ public:
 
     const MastodonCredentials& credentials() const { return credentials_; }
 
+    bool background_refresh_allowed() const override;
+
 private:
+    // Every HTTP call goes through here so the rate-limit headers are tracked.
+    net::HttpResponse send(const net::HttpRequest& req);
     // Issues an authenticated request; returns the parsed JSON body on 2xx.
     // `out_status` (optional) receives the HTTP status code regardless.
     bool request(const std::string& method, const std::string& url, const std::string& body,
@@ -128,6 +134,8 @@ private:
     // Set once we learn this instance predates grouped notifications (/api/v2/
     // notifications 404s) so we stop probing v2 and go straight to v1.
     bool grouped_notifs_unsupported_ = false;
+    // Unix time until which background refresh is paused (rate limit nearly spent).
+    std::atomic<std::int64_t> throttled_until_{0};
 };
 
 } // namespace fastsm
