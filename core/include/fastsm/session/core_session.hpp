@@ -436,6 +436,7 @@ private:
     std::int64_t last_speak_reply_ms_ = 0;
 
     std::atomic<int> auto_refresh_seconds_{0};
+    int refresh_tick_ = 0; // auto-refresh passes so far (core loop only); paces idle tabs
     std::atomic<bool> auto_refresh_running_{true};
     std::thread auto_refresh_thread_;
 

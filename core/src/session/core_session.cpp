@@ -4271,8 +4271,29 @@ void CoreSession::switch_account(const std::string& new_key) {
 }
 
 void CoreSession::refresh_all_accounts() {
+    // Threads and user timelines with nothing new in a day rarely change, yet with
+    // dozens open, polling each one every tick is what spends the rate limit. Poll
+    // those only every kIdleEvery ticks; the timeline being viewed always refreshes.
+    constexpr int kIdleEvery = 15;
+    const bool idle_turn = ++refresh_tick_ % kIdleEvery == 0;
+    const std::int64_t stale_before = util::now_unix() - 24 * 3600;
+    const TimelineController* viewed =
+        current_ >= 0 && current_ < static_cast<int>(timelines_.size()) ? timelines_[current_].get()
+                                                                        : nullptr;
+    auto idle = [&](const TimelineController& tc) {
+        const auto kind = tc.source().kind;
+        if (&tc == viewed ||
+            (kind != TimelineSource::Kind::Thread && kind != TimelineSource::Kind::UserPosts))
+            return false;
+        std::int64_t newest = 0;
+        for (const auto& it : tc.items())
+            newest = std::max(newest, it.sort_date());
+        return newest > 0 && newest < stale_before;
+    };
     // Skip accounts near their rate limit so posting and other actions still work.
-    auto refresh = [](TimelineController& tc) {
+    auto refresh = [&](TimelineController& tc) {
+        if (!idle_turn && idle(tc))
+            return;
         if (!tc.account() || tc.account()->background_refresh_allowed())
             tc.refresh();
     };
