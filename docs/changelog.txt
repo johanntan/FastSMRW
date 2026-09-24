@@ -4,6 +4,8 @@ FastSMRW changelog
 0.6.0
 -----
 
+- Fixed: on Mastodon, posting no longer fails with an error sound when you have many timelines open; background refreshing now slows down before it uses up your server's request limit.
+- Changed: threads and user timelines with nothing new for a day now check for updates every 15 minutes instead of every minute, unless you're viewing them, so keeping many open no longer strains your server's request limit.
 - New: on iPhone, an Accounts button next to the More button lists your accounts so you can jump straight to one, and add, remove or configure accounts.
 - New: on iPhone, Command+Up and Command+Down jump to the top and bottom of the timeline.
 - Fixed: on iPhone, a two-finger scrub now closes the media player or an open dialog first, instead of always closing the current timeline.
