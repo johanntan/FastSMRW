@@ -55,6 +55,8 @@ struct AppSettings {
     std::string enter_user_action = "actions";   // actions | profile | timeline
     // The secondary interact (Shift+Enter / "SecondaryAction") on a post.
     std::string secondary_post_action = "play_media"; // play_media | post_info | thread | reply | links
+	// iOS VoiceOver magic tap: use the secondary action, open compose, or let iOS handle it.
+	std::string ios_magic_tap_action = "secondary"; // "secondary" | "compose" | "system"
     bool media_background = false; // play audio without opening the player window
     // When replying, keep the person you're replying to mentioned up front and
     // append every other participant's @ at the end of the post instead. Off by
