@@ -4,6 +4,7 @@ FastSMRW changelog
 0.6.0
 -----
 
+- New: on the Mac, choose Stable version releases or every new build from main in Settings, Updates, and choose whether to check at startup.
 - Fixed: on Mastodon, posting no longer fails with an error sound when you have many timelines open; background refreshing now slows down before it uses up your server's request limit.
 - Changed: threads and user timelines with nothing new for a day now check for updates every 15 minutes instead of every minute, unless you're viewing them, so keeping many open no longer strains your server's request limit.
 - New: on iPhone, an Accounts button next to the More button lists your accounts so you can jump straight to one, and add, remove or configure accounts.
