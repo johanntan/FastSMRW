@@ -40,6 +40,7 @@ struct Row: Decodable, Equatable {
     var favorited = false
     var boosted = false
     var hasMedia = false
+	var hasPlayableMedia = false
     var isReply = false
     var isMine = false
     var gapAfter = false
@@ -65,6 +66,7 @@ struct Row: Decodable, Equatable {
         case id, text, favorited, boosted, acct, time, thread, links
         case textWithBreaks = "text_with_breaks"
         case hasMedia = "has_media"
+		case hasPlayableMedia = "has_playable_media"
         case hasHashtags = "has_hashtags"
         case isReply = "is_reply"
         case isMine = "is_mine"
@@ -86,6 +88,7 @@ struct Row: Decodable, Equatable {
         favorited = try c.decodeIfPresent(Bool.self, forKey: .favorited) ?? false
         boosted = try c.decodeIfPresent(Bool.self, forKey: .boosted) ?? false
         hasMedia = try c.decodeIfPresent(Bool.self, forKey: .hasMedia) ?? false
+		hasPlayableMedia = try c.decodeIfPresent(Bool.self, forKey: .hasPlayableMedia) ?? false
         hasHashtags = try c.decodeIfPresent(Bool.self, forKey: .hasHashtags) ?? false
         isReply = try c.decodeIfPresent(Bool.self, forKey: .isReply) ?? false
         isMine = try c.decodeIfPresent(Bool.self, forKey: .isMine) ?? false

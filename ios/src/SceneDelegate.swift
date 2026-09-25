@@ -85,7 +85,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 /// controller, which knows whether a post is focused).
 @MainActor
 protocol MagicTapResponder: AnyObject {
-    func performMagicTap()
+	func performMagicTap() -> Bool
 }
 
 /// A window that handles the VoiceOver magic tap globally. Overriding it here —
@@ -95,7 +95,6 @@ protocol MagicTapResponder: AnyObject {
 final class MagicTapWindow: UIWindow {
     override func accessibilityPerformMagicTap() -> Bool {
         guard let responder = rootViewController as? MagicTapResponder else { return false }
-        responder.performMagicTap()
-        return true
+		return responder.performMagicTap()
     }
 }

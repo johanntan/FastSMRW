@@ -42,7 +42,12 @@ final class MainViewController: UIViewController {
     /// The post row VoiceOver is currently on (nil when focus is elsewhere —
     /// a bar button, the tab strip, …). Drives the magic-tap behavior.
     private weak var focusedPostCell: PostCell?
-    var isPostFocused: Bool { focusedPostCell != nil }
+	var focusedPost: Row? {
+		guard let cell = focusedPostCell,
+		      let indexPath = tableView.indexPath(for: cell),
+		      rows.indices.contains(indexPath.row) else { return nil }
+		return rows[indexPath.row]
+	}
     /// Reading position per timeline, tracked by post id so it survives leaving
     /// / returning and posts streaming in above — same pattern as Mac/Windows.
     private var selectionByKey: [String: String] = [:]

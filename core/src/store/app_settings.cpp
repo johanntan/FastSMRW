@@ -171,6 +171,10 @@ AppSettings settings_from_json(const json& root) {
     settings.enter_user_action = root.value("enter_user_action", std::string("actions"));
     settings.secondary_post_action =
         root.value("secondary_post_action", std::string("play_media"));
+	const std::string magic_tap_action = root.value("ios_magic_tap_action", std::string("secondary"));
+	if (magic_tap_action == "secondary" || magic_tap_action == "compose" ||
+	    magic_tap_action == "system")
+		settings.ios_magic_tap_action = magic_tap_action;
     settings.media_background = root.value("media_background", false);
     settings.reply_mentions_at_end = root.value("reply_mentions_at_end", false);
     settings.invisible_mode = root.value("invisible_mode", std::string("off"));
@@ -277,6 +281,7 @@ json settings_to_json(const AppSettings& settings) {
     root["enter_post_action"] = settings.enter_post_action;
     root["enter_user_action"] = settings.enter_user_action;
     root["secondary_post_action"] = settings.secondary_post_action;
+	root["ios_magic_tap_action"] = settings.ios_magic_tap_action;
     root["media_background"] = settings.media_background;
     root["reply_mentions_at_end"] = settings.reply_mentions_at_end;
     root["invisible_mode"] = settings.invisible_mode;

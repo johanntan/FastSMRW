@@ -5277,6 +5277,12 @@ json CoreSession::row_json(const TimelineItem& item, std::int64_t now) const {
             r["muted"] = true; // conversation muted -> Status menu shows a check
         if (!s->media_attachments.empty())
             r["has_media"] = true; // gates the "View media" action
+		for (const auto& media : s->media_attachments) {
+			if (!media.url.empty()) {
+				r["has_playable_media"] = true; // matches cmd_play_media's usable attachments
+				break;
+			}
+		}
         if (!s->tags.empty())
             r["has_hashtags"] = true; // gates the "Open hashtag timeline" action
         if (s->in_reply_to_id && !s->in_reply_to_id->empty())
