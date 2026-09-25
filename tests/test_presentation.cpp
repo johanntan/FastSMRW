@@ -416,9 +416,8 @@ void test_presenter_boosted_by_handle() {
     CHECK_EQ(present::accessibility_label(inner, now, name_only), std::string());
 }
 
-// Issue 10: paragraph breaks survived to the view-post dialog but were flattened
-// on their way to the clipboard. Speech still gets one line — a screen reader
-// row shouldn't sprout newlines.
+// Paragraph breaks from both platforms can be exposed to the iOS line rotor and
+// to the clipboard, while the default spoken row label remains compact.
 void test_presenter_copy_keeps_line_breaks() {
     using present::StatusSpeechField;
     const std::int64_t now = 1000;
