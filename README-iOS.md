@@ -51,8 +51,11 @@ versions.
 - Two-finger scrub (the escape gesture) closes the current timeline when it can
   be closed, or plays a boundary sound when it cannot. Home and Notifications
   cannot be closed.
-- Two-finger double-tap (the magic tap) runs the secondary action on the focused
-  post, or opens the composer if no post is focused.
+- Two-finger double-tap (the magic tap) normally runs the secondary action on
+  the focused post, or opens the composer if no post is focused. When the
+  secondary action is View media and the post has no usable media, it opens the
+  composer instead. In Settings under Behavior, choose **VoiceOver magic tap**
+  to always open compose or let iOS handle the gesture.
 - Your reading position is remembered for each timeline and each account.
 
 ## Acting on a post

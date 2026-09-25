@@ -109,12 +109,26 @@ final class RootViewController: UIViewController {
 }
 
 extension RootViewController: MagicTapResponder {
-    /// On a post → its configurable secondary action; anywhere else → compose.
-    func performMagicTap() {
-        if mainVC?.isPostFocused == true {
-            state.performAction("SecondaryAction")
-        } else {
-            state.requestCompose(mode: "new")
-        }
-    }
+	func performMagicTap() -> Bool {
+		switch state.settingsRaw["ios_magic_tap_action"] as? String ?? "secondary" {
+		case "system":
+			return false
+		case "compose":
+			state.requestCompose(mode: "new")
+		case "secondary":
+			if let post = mainVC?.focusedPost {
+				let secondary = state.settingsRaw["secondary_post_action"] as? String ?? "play_media"
+				if secondary == "play_media" && !post.hasPlayableMedia {
+					state.requestCompose(mode: "new")
+				} else {
+					state.performAction("SecondaryAction", id: post.id)
+				}
+			} else {
+				state.requestCompose(mode: "new")
+			}
+		default:
+			return false
+		}
+		return true
+	}
 }

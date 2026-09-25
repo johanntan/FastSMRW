@@ -42,7 +42,12 @@ final class MainViewController: UIViewController {
     /// The post row VoiceOver is currently on (nil when focus is elsewhere —
     /// a bar button, the tab strip, …). Drives the magic-tap behavior.
     private weak var focusedPostCell: PostCell?
-    var isPostFocused: Bool { focusedPostCell != nil }
+	var focusedPost: Row? {
+		guard let cell = focusedPostCell,
+		      let indexPath = tableView.indexPath(for: cell),
+		      rows.indices.contains(indexPath.row) else { return nil }
+		return rows[indexPath.row]
+	}
     /// Reading position per timeline, tracked by post id so it survives leaving
     /// / returning and posts streaming in above — same pattern as Mac/Windows.
     private var selectionByKey: [String: String] = [:]
@@ -471,7 +476,7 @@ final class MainViewController: UIViewController {
             && oldById[row.id] != row {
             if let cell = tableView.cellForRow(at: IndexPath(row: index, section: 0))
                 as? PostCell {
-                cell.configure(text: row.text)
+                cell.configure(text: row.textWithBreaks ?? row.text)
                 cell.accessibilityCustomActions = accessibilityActions(for: row)
                 heightsChanged = true
             }
@@ -1412,7 +1417,7 @@ extension MainViewController: UITableViewDataSource, UITableViewDelegate {
             return cell
         }
         let row = rows[indexPath.row]
-        postCell.configure(text: row.text)
+        postCell.configure(text: row.textWithBreaks ?? row.text)
         // Resolve the cell's row at focus time — incremental inserts/removes
         // shift indexes under existing cells, so a captured index goes stale.
         postCell.onFocused = { [weak self, weak postCell] in
@@ -1466,21 +1471,117 @@ extension MainViewController: UITableViewDataSource, UITableViewDelegate {
 
 // MARK: - Cell
 
-/// One post row. The whole cell is a single VoiceOver element whose label is
-/// the core-composed row text; focusing it moves the reading cursor.
-final class PostCell: UITableViewCell {
+/// One post row. The cell stays a single VoiceOver element for its actions and
+/// reading cursor. ReadingContent exposes authored lines, not visual wraps.
+final class PostCell: UITableViewCell, UIAccessibilityReadingContent {
     static let reuseIdentifier = "PostCell"
     var onFocused: (() -> Void)?
     var onUnfocused: (() -> Void)?
+    private let bodyLabel = UILabel()
+
+    override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
+        super.init(style: style, reuseIdentifier: reuseIdentifier)
+        bodyLabel.numberOfLines = 0
+        bodyLabel.lineBreakMode = .byWordWrapping
+        bodyLabel.font = .preferredFont(forTextStyle: .body)
+        bodyLabel.textColor = .label
+        bodyLabel.adjustsFontForContentSizeCategory = true
+        bodyLabel.isAccessibilityElement = false
+        bodyLabel.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(bodyLabel)
+        NSLayoutConstraint.activate([
+            bodyLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 8),
+            bodyLabel.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -8),
+            bodyLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            bodyLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+        ])
+        isAccessibilityElement = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     func configure(text: String) {
-        var content = defaultContentConfiguration()
-        content.text = text
-        content.textProperties.numberOfLines = 6
-        content.textProperties.font = .preferredFont(forTextStyle: .body)
-        contentConfiguration = content
-        isAccessibilityElement = true
-        accessibilityLabel = text
+        // ReadingContent supplies the spoken page text. A matching accessibility
+        // label would make VoiceOver announce the entire post a second time.
+        bodyLabel.text = text.replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+    }
+
+    private func lines() -> [(text: String, frame: CGRect)] {
+        guard let text = bodyLabel.text, !text.isEmpty, bodyLabel.bounds.width > 0 else {
+            return []
+        }
+        let storage = NSTextStorage(string: text, attributes: [.font: bodyLabel.font!])
+        let layout = NSLayoutManager()
+        let container = NSTextContainer(size: CGSize(width: bodyLabel.bounds.width,
+                                                     height: .greatestFiniteMagnitude))
+        container.lineFragmentPadding = 0
+        container.lineBreakMode = .byWordWrapping
+        storage.addLayoutManager(layout)
+        layout.addTextContainer(container)
+        layout.ensureLayout(for: container)
+
+        let authoredLines = text.components(separatedBy: "\n")
+        let textLength = (text as NSString).length
+        var result: [(text: String, frame: CGRect)] = []
+        var characterOffset = 0
+        for line in authoredLines {
+            let length = (line as NSString).length
+            // Include the newline glyph for an empty line; the last empty line
+            // has no glyph, so place it below the preceding line instead.
+            let glyphLength = length == 0 && characterOffset < textLength
+                ? 1 : length
+            var rect = CGRect.zero
+            if glyphLength > 0 {
+                let glyphs = layout.glyphRange(
+                    forCharacterRange: NSRange(location: characterOffset, length: glyphLength),
+                    actualCharacterRange: nil)
+                rect = layout.boundingRect(forGlyphRange: glyphs, in: container)
+            }
+            if rect.isEmpty {
+                let bottom = result.last?.frame.maxY ?? 0
+                rect = CGRect(x: 0, y: bottom, width: bodyLabel.bounds.width,
+                              height: bodyLabel.font.lineHeight)
+            }
+            rect.origin.x = 0
+            rect.size.width = bodyLabel.bounds.width
+            result.append((line, rect))
+            characterOffset += length + 1
+        }
+        return result.map { line in
+            (line.text, UIAccessibility.convertToScreenCoordinates(line.frame,
+                                                                   in: bodyLabel))
+        }
+    }
+
+    func accessibilityPageContent() -> String? { bodyLabel.text }
+
+    func accessibilityContent(forLineNumber lineNumber: Int) -> String? {
+        let visibleLines = lines()
+        return visibleLines.indices.contains(lineNumber) ? visibleLines[lineNumber].text : nil
+    }
+
+    func accessibilityFrame(forLineNumber lineNumber: Int) -> CGRect {
+        let visibleLines = lines()
+        return visibleLines.indices.contains(lineNumber) ? visibleLines[lineNumber].frame : .zero
+    }
+
+    func accessibilityLineNumber(for point: CGPoint) -> Int {
+        let visibleLines = lines()
+        guard !visibleLines.isEmpty else { return NSNotFound }
+        if let line = visibleLines.indices.first(where: {
+            visibleLines[$0].frame.minY <= point.y && point.y < visibleLines[$0].frame.maxY
+        }) {
+            return line
+        }
+        return visibleLines.indices.min { first, second in
+            let a = visibleLines[first].frame
+            let b = visibleLines[second].frame
+            let distanceA = max(a.minY - point.y, point.y - a.maxY, 0)
+            let distanceB = max(b.minY - point.y, point.y - b.maxY, 0)
+            return distanceA < distanceB
+        } ?? NSNotFound
     }
 
     override func accessibilityElementDidBecomeFocused() {
