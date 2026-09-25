@@ -35,6 +35,8 @@ struct Timeline: Decodable, Equatable {
 struct Row: Decodable, Equatable {
     let id: String
     let text: String
+    /// The post's configured spoken fields with its authored line breaks intact.
+    var textWithBreaks: String?
     var favorited = false
     var boosted = false
     var hasMedia = false
@@ -62,6 +64,7 @@ struct Row: Decodable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case id, text, favorited, boosted, acct, time, thread, links
+        case textWithBreaks = "text_with_breaks"
         case hasMedia = "has_media"
 		case hasPlayableMedia = "has_playable_media"
         case hasHashtags = "has_hashtags"
@@ -81,6 +84,7 @@ struct Row: Decodable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
         text = try c.decode(String.self, forKey: .text)
+        textWithBreaks = try c.decodeIfPresent(String.self, forKey: .textWithBreaks)
         favorited = try c.decodeIfPresent(Bool.self, forKey: .favorited) ?? false
         boosted = try c.decodeIfPresent(Bool.self, forKey: .boosted) ?? false
         hasMedia = try c.decodeIfPresent(Bool.self, forKey: .hasMedia) ?? false

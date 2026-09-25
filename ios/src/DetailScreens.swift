@@ -43,18 +43,18 @@ class ActionListViewController: UITableViewController {
 
     override func tableView(_ tableView: UITableView,
                             cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        if indexPath.section == 0 {
+            let cell = PostCell(style: .default, reuseIdentifier: nil)
+            cell.configure(text: body)
+            cell.selectionStyle = .none
+            return cell
+        }
         let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
         var content = cell.defaultContentConfiguration()
-        if indexPath.section == 0 {
-            content.text = body
-            content.textProperties.numberOfLines = 0
-            cell.selectionStyle = .none
-        } else {
-            let item = items[indexPath.row]
-            content.text = item.title
-            content.textProperties.color = item.destructive ? .systemRed : .tintColor
-            cell.accessibilityTraits = .button
-        }
+        let item = items[indexPath.row]
+        content.text = item.title
+        content.textProperties.color = item.destructive ? .systemRed : .tintColor
+        cell.accessibilityTraits = .button
         cell.contentConfiguration = content
         return cell
     }

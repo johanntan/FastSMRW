@@ -5262,6 +5262,9 @@ json CoreSession::row_json(const TimelineItem& item, std::int64_t now) const {
     json r;
     r["id"] = item.id();
     r["text"] = present::accessibility_label(item, now);
+    if (const Status* s = std::get_if<Status>(&item.value))
+        r["text_with_breaks"] = present::accessibility_label(
+            *s, now, present::SpeechConfig::current().status, /*keep_line_breaks=*/true);
     if (const Status* s = item.actionable_status()) {
         r["favorited"] = s->favourited;
         r["boosted"] = s->boosted;
